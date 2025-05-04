@@ -381,10 +381,14 @@ class Qwen2VLGRPOTrainer(Trainer):
 
         prompts = [x["prompt"] for x in inputs]
         prompts_text = [maybe_apply_chat_template(example, self.processing_class)["prompt"] for example in inputs]
-        images = [x["decoded_image"] for x in inputs]
-        # print("~~~~~~~~~~~~~~~~~~~~~~~\n")
-        # print("prompts:", prompts)
-        # print("prompts_text:", prompts_text)
+        images = [x["image"] for x in inputs]
+
+        # # 找出 images 中值为 None 的索引
+        # none_indices = [i for i, img in enumerate(images) if img is None]
+        # # 删除 prompts_text 和 images 中对应索引的元素
+        # for index in sorted(none_indices, reverse=True):  # 从后往前删除，避免索引变化
+        #     del prompts_text[index]
+        #     del images[index]
 
         prompt_inputs = self.processing_class(
             text=prompts_text,

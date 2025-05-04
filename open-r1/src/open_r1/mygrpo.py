@@ -383,11 +383,22 @@ class GRPOScriptArguments(ScriptArguments):
 #         show_flage = 0 
 #     return rewards
 
-def accuracy_reward(completions, solution, **kwargs):
+def accuracy_reward(completions, answer, choices, **kwargs):
     completion_contents = [completion[0]["content"] for completion in completions]
-    print("~~~~~~~~~~~~~~~~~\n")
-    print("completion_contents", completion_contents)
-    print("solution", solution)
+    answer_option = answer
+    answer_text = [choice[int(option)] for choice, option in zip(choices, answer_option)]
+    # print("~~~~~~~~~~~~~~~~~\n")
+    rewards = []
+    for content, option, text in zip(completion_contents, answer_option, answer_text):
+        reward = 0.0
+        content_match = re.search(r'<answer>(.*?)</answer>', content)
+        student_answer = content_match.group(1).strip().lower() if content_match else content.strip()
+        # print("student_answer", student_answer)
+        if str(option) in student_answer or text.lower() in student_answer:
+            reward = 1.0
+        rewards.append(reward)
+
+    return rewards
 
 
 def format_reward(completions, **kwargs):
@@ -406,6 +417,7 @@ reward_funcs_registry = {
     # "accuracy_iou": accuracy_reward_iou,
     # "accuracy_confidence": accuracy_reward_confidence,
     "format": format_reward,
+    "accuracy": accuracy_reward,
 }
 
 SYSTEM_PROMPT = (
@@ -415,24 +427,52 @@ SYSTEM_PROMPT = (
     "<think> reasoning process here </think><answer> answer here </answer>"
 )
 
+def make_mmbench_user_prompt(question, hint, a, b, c, d):
+    user_prompt = f"Question: {question}\n"
+    if a is not None:
+        user_prompt += f"A: {a}\n"
+    if b is not None:
+        user_prompt += f"B: {b}\n"
+    if c is not None:
+        user_prompt += f"C: {c}\n"
+    if d is not None:
+        user_prompt += f"D: {d}\n"
+    user_prompt += "Requirement: This is a multiple-choice question. Please select the correct answer based on the question and the provided options.\n"
+    user_prompt += f"Hint: {hint}\n"
+    return user_prompt
+
+def make_scienceqa_user_prompt(question, choices, hint):
+    user_prompt = f"Question: {question}\n"
+    for idx, choice in enumerate(choices):
+        user_prompt += f"{idx}: {choice}\n"
+    user_prompt += "Requirement: This is a multiple-choice question. Please select the correct answer based on the question and the provided options.\n"
+    user_prompt += f"Hint: {hint}\n"
+    return user_prompt
+
 def main(script_args, training_args, model_args):
     # Get reward functions
     # script_args.reward_funcs = ['accuracy_iou','accuracy_confidence','format']
-    script_args.reward_funcs = ['format']
+    script_args.reward_funcs = ['format', 'accuracy']
     reward_funcs = [reward_funcs_registry[func] for func in script_args.reward_funcs]
 
     # Load the dataset from huggingface 
     # 从hf-mirror下载数据集
-    dataset = load_dataset(script_args.dataset_name, name=script_args.dataset_config, cache_dir="datasets/math_vista")
+    if script_args.dataset_name == "datasets/mm_bench/MMBench_DEV_EN.tsv":
+        print("datasets/mm_bench/MMBench_DEV_EN.tsv\n")
+        dataset = load_dataset("csv", data_files=script_args.dataset_name, delimiter="\t")
+    elif script_args.dataset_name == "derek-thomas/ScienceQA":
+        dataset = load_dataset("derek-thomas/ScienceQA", cache_dir="datasets/science_qa")
+    else:
+        dataset = load_dataset(script_args.dataset_name, name=script_args.dataset_config, cache_dir="datasets/math_vista")
 
     # Format into conversation
-    def make_conversation(example):
-        return {
-            "prompt": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": example["question"]},
-            ],
-        }
+    # def make_conversation(example):
+    #     return {
+    #         "prompt": [
+    #             {"role": "system", "content": SYSTEM_PROMPT},
+    #             {"role": "user", "content": example["question"]},
+    #         ],
+    #     }
 
     def make_conversation_image(example):
         # example['image'] = example['decoded_image']
@@ -443,21 +483,18 @@ def main(script_args, training_args, model_args):
                     "role": "user",
                     "content": [
                         {"type": "image"},
-                        {"type": "text", "text": SYSTEM_PROMPT + "\n" + example["question"]},
+                        {"type": "text", "text": SYSTEM_PROMPT + "\n" + make_scienceqa_user_prompt(example["question"], example["choices"], example["hint"])},
                     ],
                 },
             ],
         }
-
-
-    if "image" in dataset[script_args.dataset_train_split].features:
-        print("has image in dataset")
-        dataset = dataset.map(make_conversation_image)  # Utilize multiprocessing for faster mapping
-
-    else:
-        print("no image in dataset")
-        dataset = dataset.map(make_conversation)
-        dataset = dataset.remove_columns("messages")
+    def filter_vqa_items(example):
+        # Define your condition here. For example, remove items without an image
+        return example["image"] is not None and example["image"] != ""
+    
+    # Apply the filter to the dataset
+    dataset = dataset.filter(filter_vqa_items)
+    dataset = dataset.map(make_conversation_image)  # Utilize multiprocessing for faster mapping
 
     
     trainer_cls = Qwen2VLGRPOTrainer if not training_args.use_vllm else Qwen2VLGRPOVLLMTrainer
@@ -488,7 +525,7 @@ def main(script_args, training_args, model_args):
 if __name__ == "__main__":
     parser = TrlParser((GRPOScriptArguments, GRPOConfig, ModelConfig))
     script_args, training_args, model_args = parser.parse_args_and_config()
-    script_args.dataset_train_split = "testmini"
+    script_args.dataset_train_split = "train"
     print("training_args\n", training_args)
     print("script_args\n", script_args)
     main(script_args, training_args, model_args)
