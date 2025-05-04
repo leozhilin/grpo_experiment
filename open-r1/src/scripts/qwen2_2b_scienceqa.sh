@@ -4,7 +4,7 @@ export CKPT_PATH=Qwen/Qwen2-VL-2B-Instruct
 export SAVE_PATH=models/ckpt/qwen2_2b_scienceqa_ckpt
 
 export DEBUG_MODE="true" # Enable Debug if you want to see the rollout of model during RL
-export LOG_PATH="./debug_log_2b_GRPO_coco_base65cate_6k.txt"
+export LOG_PATH="./debug_log_2b_GRPO_scienceqa.txt"
 
 # Disable P2P and IB communication for RTX 4000 series
 export NCCL_P2P_DISABLE="1"
