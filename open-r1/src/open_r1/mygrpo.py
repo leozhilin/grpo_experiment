@@ -70,27 +70,30 @@ class GRPOScriptArguments(ScriptArguments):
         metadata={"help": "Minimum number of pixels for the image"},
     )
 
+
 def accuracy_reward(completions, answer, choices, **kwargs):
-
-    
-
-
     completion_content = [completion[0]["content"] for completion in completions] # 模型回复
 
     rewards = []
     for content, correct_option, choice in zip(completion_content, answer, choices):
-        reward = 0.0
         content_match = re.search(r'<answer>(.*?)</answer>', content)
-        model_answer = content_match.group(1).strip().lower() if content_match else content.strip() # 提取模型回复中的答案
 
+        # 从模型的回复中提取模型的答案
+        model_answer = content_match.group(1).strip().lower() if content_match else content.strip() # 提取模型回复中的答案
+        model_option = None # 模型给出的选项
         for idx, choice_text in enumerate(choice):
             if idx == correct_option:
                 if str(idx) in model_answer or choice_text.lower() in model_answer: # 如果模型回复中包含正确答案，reward = 1，继续检查
-                    reward = 1.0
+                    model_option = idx
             else:
                 if str(idx) in model_answer or choice_text.lower() in model_answer: # 如果模型回复中包含错误答案，reward = 0， break
-                    reward = 0.0
+                    model_option = None
                     break
+
+        if model_option == correct_option:
+            reward = 1.0
+        else:
+            reward = 0.0
         rewards.append(reward)
 
         if os.getenv("DEBUG_MODE") == "true":
@@ -98,8 +101,11 @@ def accuracy_reward(completions, answer, choices, **kwargs):
             log_path = os.getenv("LOG_PATH")
             with open(log_path, "a") as f:
                 f.write(f"------------- {current_time} Accuracy reward: {reward} -------------\n")
-                f.write(f"conpletion: {content}\n")
-                f.write(f"model_answer: {model_answer}\n")
+                f.write(f"completion: {content}\n")
+                if model_option is None:
+                    f.write(f"model_answer: {model_answer}\n")
+                else:
+                    f.write(f"model_answer: {model_option}: {choice[model_option]}\n")
                 f.write(f"ground_truth: {correct_option}: {choice[correct_option]}\n")
 
     return rewards

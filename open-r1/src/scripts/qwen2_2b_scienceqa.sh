@@ -7,8 +7,8 @@ export DEBUG_MODE="true" # Enable Debug if you want to see the rollout of model 
 export LOG_PATH="./debug_log_2b_GRPO_scienceqa.txt"
 
 # Disable P2P and IB communication for RTX 4000 series
-export NCCL_P2P_DISABLE="1"
-export NCCL_IB_DISABLE="1"
+# export NCCL_P2P_DISABLE="1"
+# export NCCL_IB_DISABLE="1"
 # export CUDA_VISIBLE_DEVICES=0,1
 
 # Set Hugging Face endpoint to use mirror
@@ -16,7 +16,7 @@ export HF_ENDPOINT=https://hf-mirror.com
 # export TORCH_HOME=/share/leozhilin/.torch
 # export CUDA_LAUNCH_BLOCKING=1
 
-torchrun --nproc_per_node="4" \
+torchrun --nproc_per_node="8" \
     --nnodes="1" \
     --node_rank="0" \
     --master_addr="127.0.0.1" \
