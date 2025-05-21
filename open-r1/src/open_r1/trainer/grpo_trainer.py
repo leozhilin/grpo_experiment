@@ -19,6 +19,7 @@ from typing import Any, Callable, Optional, Union
 
 import torch
 import torch.utils.data
+from torch.utils.data import Sampler
 import transformers
 from datasets import Dataset, IterableDataset
 from packaging import version
@@ -345,6 +346,10 @@ class Qwen2VLGRPOTrainer(Trainer):
             if isinstance(reward_func, PreTrainedModel):
                 self.reward_funcs[i] = self.accelerator.prepare_model(reward_func, evaluation_mode=True)
 
+    def _get_train_sampler(self):
+        """Override the default sampler to use OrderedSampler"""
+        return OrderedSampler(self.train_dataset)
+
     def _set_signature_columns_if_needed(self):
         # If `self.args.remove_unused_columns` is True, non-signature columns are removed.
         # By default, this method sets `self._signature_columns` to the model's expected inputs.
@@ -382,6 +387,8 @@ class Qwen2VLGRPOTrainer(Trainer):
         prompts = [x["prompt"] for x in inputs]
         prompts_text = [maybe_apply_chat_template(example, self.processing_class)["prompt"] for example in inputs]
         images = [x["image"] for x in inputs]
+        grades = [x["grade"] for x in inputs]
+        print(grades)
 
         # # 找出 images 中值为 None 的索引
         # none_indices = [i for i, img in enumerate(images) if img is None]
@@ -587,3 +594,40 @@ class Qwen2VLGRPOTrainer(Trainer):
         )
 
         model_card.save(os.path.join(self.args.output_dir, "README.md"))
+
+class OrderedSampler(Sampler):
+    """
+    Sampler that samples indices in order based on difficulty level.
+    The order is determined by the difficulty level of each example.
+
+    Args:
+        data_source (`Sized`):
+            Dataset to sample from.
+    """
+
+    def __init__(self, data_source):
+        self.data_source = data_source
+        self.num_samples = len(data_source)
+        
+        # 获取每个样本的难度级别
+        self.difficulty_levels = []
+        for example in data_source:
+            grade = example["grade"]
+            grade_num = int(grade.replace("grade", ""))
+            if grade_num <= 4:
+                level = 0  # easy
+            elif grade_num <= 8:
+                level = 1  # mid
+            else:
+                level = 2  # hard
+            self.difficulty_levels.append(level)
+        
+        # 按难度级别排序索引
+        self.ordered_indices = sorted(range(self.num_samples), 
+                                    key=lambda i: self.difficulty_levels[i])
+
+    def __iter__(self):
+        return iter(self.ordered_indices)
+
+    def __len__(self):
+        return self.num_samples

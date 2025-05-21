@@ -1,7 +1,7 @@
 # export DATA_PATH=AI4Math/MathVista
 export DATA_PATH=derek-thomas/ScienceQA
 export CKPT_PATH=Qwen/Qwen2-VL-2B-Instruct
-export SAVE_PATH=models/ckpt/qwen2_2b_scienceqa_ckpt
+export SAVE_PATH=models/ckpt/qwen2_2b_scienceqa_ckpt_cl
 
 export DEBUG_MODE="true" # Enable Debug if you want to see the rollout of model during RL
 export LOG_PATH="./debug_log_2b_GRPO_scienceqa.txt"
